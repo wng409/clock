@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>多端自适应翻页时钟</title>
+    <style>
+        @font-face {
+            font-family: 'HarmonyOS Sans';
+            src: local('HarmonyOS Sans SC'), 
+                 local('PingFang SC'),
+                 local('Microsoft YaHei'),
+                 local('Helvetica Neue'),
+                 url('https://lf1-cdn-tos.bytegoofy.com/obj/ttfe/ies/semi/HarmonyOS_Sans_Regular.ttf');
+            font-weight: 450;
+            font-display: swap;
+        }
+
+        /* CSS变量 - 统一管理设计系统 */
+        :root {
+            /* 颜色系统 */
+            --color-bg: #000000;
+            --color-primary: #ffffff;
+            --color-secondary: rgba(255, 255, 255, 0.9);
+            --color-tertiary: rgba(255, 255, 255, 0.7);
+            --color-card-bg: #0a0a0a;
+            --color-border: #222222;
+            --color-accent: #4fc3f7;
+            
+            /* 尺寸系统 - 基于视口单位 */
+            --unit-size-base: min(1.4vw, 1.4vh);
+            --digit-font-size: calc(var(--unit-size-base) * 7);
+            --separator-font-size: calc(var(--digit-font-size) * 0.8);
+            --ampm-font-size: calc(var(--unit-size-base) * 1.7);
+            
+            /* 布局间距 */
+            --gap-xs: calc(var(--unit-size-base) * 0.5);
+            --gap-sm: calc(var(--unit-size-base) * 1);
+            --gap-md: calc(var(--unit-size-base) * 1.5);
+            --gap-lg: calc(var(--unit-size-base) * 2);
+            --gap-xl: calc(var(--unit-size-base) * 3);
+            
+            /* 容器尺寸 */
+            --card-width: calc(var(--unit-size-base) * 14);
+            --card-height: calc(var(--card-width) * 1.4286); /* 200/140比例 */
+            --card-radius: calc(var(--unit-size-base) * 1);
+            
+            /* 动画速度 */
+            --animation-fast: 0.3s;
+            --animation-normal: 0.6s;
+            --animation-slow: 0.8s;
+            
+            /* 安全区域 - 适配异形屏 */
+            --safe-area-top: env(safe-area-inset-top, 0px);
+            --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-area-left: env(safe-area-inset-left, 0px);
+            --safe-area-right: env(safe-area-inset-right, 0px);
+        }
+
+        /* 媒体查询 - 设备类型适配 */
+        @media (max-width: 480px) { /* 手机 */
+            :root {
+                --unit-size-base: min(2.5vw, 2.5vh);
+                --digit-font-size: calc(var(--unit-size-base) * 6);
+            }
+        }
+        
+        @media (min-width: 481px) and (max-width: 768px) { /* 平板 */
+            :root {
+                --unit-size-base: min(2vw, 2vh);
+                --digit-font-size: calc(var(--unit-size-base) * 6.5);
+            }
+        }
+        
+        @media (min-width: 769px) and (max-width: 1024px) { /* 小电脑/大平板 */
+            :root {
+                --unit-size-base: min(1.8vw, 1.8vh);
+                --digit-font-size: calc(var(--unit-size-base) * 7);
+            }
+        }
+        
+        @media (min-width: 1025px) and (max-width: 1920px) { /* 电脑 */
+            :root {
+                --unit-size-base: min(1.4vw, 1.4vh);
+                --digit-font-size: calc(var(--unit-size-base) * 7);
+            }
+        }
+        
+        @media (min-width: 1921px) { /* 电视/大屏 */
+            :root {
+                --unit-size-base: min(1vw, 1vh);
+                --digit-font-size: calc(var(--unit-size-base) * 8);
+                --animation-normal: 0.8s;
+            }
+        }
+        
+        /* 横屏适配 */
+        @media (orientation: landscape) and (max-height: 500px) {
+            :root {
+                --unit-size-base: min(1.5vh, 1.5vw);
+                --digit-font-size: calc(var(--unit-size-base) * 6);
+                --card-height: calc(var(--card-width) * 1.2);
+            }
+        }
+        
+        /* 高对比度模式适配 */
+        @media (prefers-contrast: high) {
+            :root {
+                --color-primary: #ffffff;
+                --color-card-bg: #000000;
+                --color-border: #ffffff;
+            }
+        }
+        
+        /* 暗色模式适配 */
+        @media (prefers-color-scheme: light) {
+            :root {
+                --color-bg: #f5f5f5;
+                --color-primary: #000000;
+                --color-card-bg: #ffffff;
+                --color-border: #dddddd;
+                --color-accent: #2196f3;
+            }
+        }
+
+        /* 基础样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        body {
+            background: var(--color-bg);
+            color: var(--color-primary);
+            font-family: 'HarmonyOS Sans', 
+                        -apple-system, 
+                        BlinkMacSystemFont, 
+                        'Segoe UI', 
+                        'PingFang SC', 
+                        'Hiragino Sans GB', 
+                        'Microsoft YaHei', 
+                        sans-serif;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding-top: var(--safe-area-top);
+            padding-bottom: var(--safe-area-bottom);
+            padding-left: var(--safe-area-left);
+            padding-right: var(--safe-area-right);
+            user-select: none;
+            cursor: pointer;
+            filter: brightness(1);
+            transition: filter var(--animation-normal) ease;
+        }
+
+        /* 时钟容器 */
+        .flip-clock {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--gap-md);
+            transition: transform var(--animation-fast) ease;
+            flex-wrap: wrap;
+            padding: var(--gap-md);
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        /* 时间单元 */
+        .time-unit {
+            position: relative;
+            width: var(--card-width);
+            height: var(--card-height);
+            min-width: 50px;
+            min-height: 70px;
+        }
+
+        /* 数字显示层 */
+        .digit-display {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--digit-font-size);
+            font-weight: 450;
+            background: var(--color-card-bg);
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            z-index: 100;
+            border-bottom: 1px solid var(--color-border);
+            box-shadow: 0 var(--gap-xs) var(--gap-md) rgba(0, 0, 0, 0.5);
+        }
+
+        /* 翻页动画层 */
+        .flip-animation {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 50;
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            transform-style: preserve-3d;
+            perspective: calc(var(--card-width) * 5);
+        }
+
+        /* 动画卡片 */
+        .flip-card {
+            position: absolute;
+            width: 100%;
+            height: 50%;
+            background: var(--color-card-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--digit-font-size);
+            font-weight: 450;
+            backface-visibility: hidden;
+            transform-origin: bottom;
+            transform-style: preserve-3d;
+            will-change: transform;
+        }
+
+        .flip-card.top {
+            top: 0;
+            border-radius: var(--card-radius) var(--card-radius) 0 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .flip-card.bottom {
+            top: 50%;
+            transform-origin: top;
+            align-items: flex-start;
+            border-radius: 0 0 var(--card-radius) var(--card-radius);
+            border-top: 1px solid rgba(0, 0, 0, 0.3);
+        }
+
+        /* 分隔符 */
+        .separator {
+            font-size: var(--separator-font-size);
+            opacity: 0.9;
+            margin-top: calc(var(--unit-size-base) * -1.5);
+            font-weight: 200;
+        }
+
+        /* AM/PM */
+        .ampm {
+            font-size: var(--ampm-font-size);
+            margin-left: var(--gap-lg);
+            margin-top: calc(var(--unit-size-base) * 4);
+            opacity: 0.9;
+            font-weight: 350;
+            letter-spacing: 1px;
+        }
+
+        /* 控制条 */
+        .controls {
+            position: fixed;
+            bottom: calc(30px + var(--safe-area-bottom));
+            left: max(50%, var(--safe-area-left));
+            transform: translateX(-50%);
+            background: rgba(20, 20, 20, 0.95);
+            backdrop-filter: blur(10px);
+            padding: var(--gap-md) var(--gap-lg);
+            border-radius: calc(var(--unit-size-base) * 2);
+            display: none;
+            flex-direction: column;
+            gap: var(--gap-sm);
+            min-width: min(300px, 90vw);
+            max-width: 90vw;
+            border: 1px solid var(--color-border);
+            box-shadow: 0 var(--gap-sm) var(--gap-xl) rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .controls.visible {
+            display: flex;
+        }
+
+        .size-control {
+            display: flex;
+            align-items: center;
+            gap: var(--gap-md);
+        }
+
+        .size-label {
+            font-size: calc(var(--unit-size-base) * 0.9);
+            color: var(--color-tertiary);
+            min-width: calc(var(--unit-size-base) * 6);
+        }
+
+        .size-slider {
+            flex: 1;
+            height: calc(var(--unit-size-base) * 0.5);
+            -webkit-appearance: none;
+            appearance: none;
+            background: #333;
+            border-radius: calc(var(--unit-size-base) * 0.3);
+            outline: none;
+        }
+
+        .size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: calc(var(--unit-size-base) * 2);
+            height: calc(var(--unit-size-base) * 2);
+            border-radius: 50%;
+            background: var(--color-accent);
+            cursor: pointer;
+            border: 2px solid #fff;
+            transition: transform var(--animation-fast) ease;
+        }
+
+        .size-slider::-moz-range-thumb {
+            width: calc(var(--unit-size-base) * 2);
+            height: calc(var(--unit-size-base) * 2);
+            border-radius: 50%;
+            background: var(--color-accent);
+            cursor: pointer;
+            border: 2px solid #fff;
+        }
+
+        .size-slider::-webkit-slider-thumb:active {
+            transform: scale(1.2);
+        }
+
+        /* 提示信息 */
+        .hint {
+            position: fixed;
+            top: calc(20px + var(--safe-area-top));
+            left: max(50%, var(--safe-area-left));
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            color: var(--color-tertiary);
+            padding: var(--gap-xs) var(--gap-md);
+            border-radius: calc(var(--unit-size-base) * 2);
+            font-size: calc(var(--unit-size-base) * 0.9);
+            opacity: 0;
+            transition: opacity var(--animation-fast) ease;
+            pointer-events: none;
+            text-align: center;
+            max-width: 90vw;
+            z-index: 999;
+        }
+
+        .hint.visible {
+            opacity: 1;
+        }
+
+        /* 设备类型指示器（调试用，正式可移除） */
+        .device-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #4fc3f7;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1001;
+            display: none; /* 调试时改为block */
+        }
+
+        /* 触摸反馈 */
+        @media (hover: none) and (pointer: coarse) {
+            body {
+                cursor: default;
+            }
+            
+            .size-slider::-webkit-slider-thumb {
+                width: calc(var(--unit-size-base) * 2.5);
+                height: calc(var(--unit-size-base) * 2.5);
+            }
+        }
+
+        /* 打印样式 */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+                filter: none !important;
+            }
+            
+            .controls,
+            .hint {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="device-indicator" id="deviceIndicator"></div>
+    <div class="hint" id="hint">单击显示/隐藏控制条，双击重置亮度</div>
+    
+    <div class="flip-clock" id="flipClock">
+        <!-- 小时 -->
+        <div class="time-unit" id="hourUnit">
+            <div class="digit-display" id="hourDisplay">12</div>
+            <div class="flip-animation" id="hourAnimation">
+                <div class="flip-card top" id="hourTop"></div>
+                <div class="flip-card bottom" id="hourBottom"></div>
+            </div>
+        </div>
+        
+        <div class="separator">:</div>
+        
+        <!-- 分钟 -->
+        <div class="time-unit" id="minuteUnit">
+            <div class="digit-display" id="minuteDisplay">00</div>
+            <div class="flip-animation" id="minuteAnimation">
+                <div class="flip-card top" id="minuteTop"></div>
+                <div class="flip-card bottom" id="minuteBottom"></div>
+            </div>
+        </div>
+        
+        <div class="separator">:</div>
+        
+        <!-- 秒钟 -->
+        <div class="time-unit" id="secondUnit">
+            <div class="digit-display" id="secondDisplay">00</div>
+            <div class="flip-animation" id="secondAnimation">
+                <div class="flip-card top" id="secondTop"></div>
+                <div class="flip-card bottom" id="secondBottom"></div>
+            </div>
+        </div>
+        
+        <div class="ampm" id="ampmDisplay">AM</div>
+    </div>
+    
+    <div class="controls" id="controls">
+        <div class="size-control">
+            <span class="size-label">时钟大小</span>
+            <input type="range" class="size-slider" id="sizeSlider" min="0.5" max="2" step="0.1" value="1">
+        </div>
+    </div>
+
+    <script>
+        class AdaptiveFlipClock {
+            constructor() {
+                this.currentTime = {
+                    hour: '12',
+                    minute: '00',
+                    second: '00',
+                    ampm: 'AM'
+                };
+                
+                this.isAnimating = {
+                    hour: false,
+                    minute: false,
+                    second: false
+                };
+                
+                this.burnProtection = {
+                    brightness: 1.0,
+                    lastShift: Date.now(),
+                    shiftInterval: 30 * 60 * 1000,
+                    shiftAmount: { x: 0, y: 0 }
+                };
+                
+                this.controlsVisible = false;
+                this.scale = 1.0;
+                this.deviceType = this.detectDeviceType();
+                
+                this.init();
+            }
+            
+            detectDeviceType() {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                const aspectRatio = width / height;
+                const ua = navigator.userAgent;
+                
+                let type = 'desktop';
+                
+                // 手机
+                if (width <= 480 || (ua.match(/Android|iPhone|iPod|iPad|BlackBerry|IEMobile/i))) {
+                    type = height > width ? 'phone-portrait' : 'phone-landscape';
+                }
+                // 平板
+                else if (width <= 1024) {
+                    type = height > width ? 'tablet-portrait' : 'tablet-landscape';
+                }
+                // 电视/大屏
+                else if (width > 1920 && aspectRatio > 1.7) {
+                    type = 'tv';
+                }
+                // 异形屏检测
+                else if ('devicePixelRatio' in window && window.devicePixelRatio > 2) {
+                    type = 'retina';
+                }
+                
+                // 更新指示器
+                document.getElementById('deviceIndicator').textContent = 
+                    `${type} - ${width}×${height} - ${window.devicePixelRatio || 1}x`;
+                
+                return type;
+            }
+            
+            init() {
+                console.log(`时钟初始化 - 设备类型: ${this.deviceType}`);
+                
+                this.setInitialTime();
+                this.initAnimationElements();
+                this.setupEventListeners();
+                this.startClock();
+                this.setupResizeHandler();
+                
+                this.showHint(`翻页时钟已启动 - ${this.deviceType}`, 2000);
+            }
+            
+            setInitialTime() {
+                const now = new Date();
+                let hours = now.getHours();
+                const minutes = now.getMinutes();
+                const seconds = now.getSeconds();
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                
+                hours = hours % 12;
+                hours = hours === 0 ? 12 : hours;
+                
+                this.currentTime = {
+                    hour: hours.toString().padStart(2, '0'),
+                    minute: minutes.toString().padStart(2, '0'),
+                    second: seconds.toString().padStart(2, '0'),
+                    ampm: ampm
+                };
+                
+                // 更新DOM
+                document.getElementById('hourDisplay').textContent = this.currentTime.hour;
+                document.getElementById('minuteDisplay').textContent = this.currentTime.minute;
+                document.getElementById('secondDisplay').textContent = this.currentTime.second;
+                document.getElementById('ampmDisplay').textContent = this.currentTime.ampm;
+                
+                document.getElementById('hourTop').textContent = this.currentTime.hour;
+                document.getElementById('hourBottom').textContent = this.currentTime.hour;
+                document.getElementById('minuteTop').textContent = this.currentTime.minute;
+                document.getElementById('minuteBottom').textContent = this.currentTime.minute;
+                document.getElementById('secondTop').textContent = this.currentTime.second;
+                document.getElementById('secondBottom').textContent = this.currentTime.second;
+            }
+            
+            initAnimationElements() {
+                ['hour', 'minute', 'second'].forEach(unit => {
+                    const topCard = document.getElementById(`${unit}Top`);
+                    const bottomCard = document.getElementById(`${unit}Bottom`);
+                    
+                    topCard.style.transform = 'rotateX(0deg)';
+                    bottomCard.style.transform = 'rotateX(90deg)';
+                    
+                    // 根据设备类型调整动画速度
+                    const duration = this.deviceType === 'tv' ? '0.8s' : '0.6s';
+                    const timing = this.deviceType === 'tv' ? 'cubic-bezier(0.4, 0, 0.2, 1)' : 'cubic-bezier(0.37, 0, 0.63, 1)';
+                    
+                    topCard.style.transition = `transform ${duration} ${timing}`;
+                    bottomCard.style.transition = `transform ${duration} ${timing}`;
+                });
+            }
+            
+            setupEventListeners() {
+                const body = document.body;
+                const controls = document.getElementById('controls');
+                const sizeSlider = document.getElementById('sizeSlider');
+                
+                // 触摸设备优化
+                const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                
+                // 单击事件
+                if (isTouchDevice) {
+                    // 触摸设备使用touchstart和touchend
+                    body.addEventListener('touchstart', (e) => {
+                        if (e.touches.length === 1) {
+                            this.handleClick(e);
+                        }
+                    }, { passive: true });
+                } else {
+                    body.addEventListener('click', (e) => {
+                        this.handleClick(e);
+                    });
+                }
+                
+                // 双击事件
+                let lastTap = 0;
+                body.addEventListener(isTouchDevice ? 'touchend' : 'click', (e) => {
+                    const currentTime = new Date().getTime();
+                    const tapLength = currentTime - lastTap;
+                    
+                    if (tapLength < 300 && tapLength > 0) {
+                        e.preventDefault();
+                        this.resetBrightness();
+                        this.showHint('亮度已重置', 1500);
+                    }
+                    lastTap = currentTime;
+                });
+                
+                // 滑块控制
+                sizeSlider.addEventListener('input', (e) => {
+                    this.scale = parseFloat(e.target.value);
+                    this.updateClockScale();
+                });
+                
+                // 触摸设备滑块优化
+                if (isTouchDevice) {
+                    sizeSlider.addEventListener('touchstart', (e) => {
+                        e.stopPropagation();
+                    }, { passive: true });
+                    
+                    sizeSlider.addEventListener('touchmove', (e) => {
+                        e.stopPropagation();
+                    }, { passive: true });
+                }
+                
+                // 键盘支持（电视/大屏）
+                document.addEventListener('keydown', (e) => {
+                    switch(e.key) {
+                        case ' ':
+                        case 'Enter':
+                            this.toggleControls();
+                            break;
+                        case 'Escape':
+                            this.hideControls();
+                            break;
+                        case 'ArrowUp':
+                            this.adjustScale(0.1);
+                            break;
+                        case 'ArrowDown':
+                            this.adjustScale(-0.1);
+                            break;
+                    }
+                });
+                
+                // 初始提示
+                setTimeout(() => {
+                    const hintText = isTouchDevice ? 
+                        '轻触显示/隐藏控制条，双击重置亮度' : 
+                        '单击显示/隐藏控制条，双击重置亮度';
+                    this.showHint(hintText, 3000);
+                }, 1000);
+            }
+            
+            handleClick(e) {
+                const target = e.target || e.touches[0].target;
+                
+                if (target === document.body || 
+                    target.classList.contains('flip-clock') || 
+                    target.classList.contains('time-unit') || 
+                    target.classList.contains('digit-display')) {
+                    
+                    this.toggleControls();
+                }
+            }
+            
+            toggleControls() {
+                this.controlsVisible = !this.controlsVisible;
+                document.getElementById('controls').classList.toggle('visible', this.controlsVisible);
+                
+                this.showHint(this.controlsVisible ? 
+                    '控制条已显示，拖动滑块调整大小' : 
+                    '控制条已隐藏', 2000);
+            }
+            
+            hideControls() {
+                this.controlsVisible = false;
+                document.getElementById('controls').classList.remove('visible');
+            }
+            
+            adjustScale(delta) {
+                const slider = document.getElementById('sizeSlider');
+                let value = parseFloat(slider.value) + delta;
+                value = Math.max(0.5, Math.min(2, value));
+                slider.value = value;
+                this.scale = value;
+                this.updateClockScale();
+            }
+            
+            setupResizeHandler() {
+                let resizeTimer;
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => {
+                        this.deviceType = this.detectDeviceType();
+                        this.updateLayoutForDevice();
+                    }, 250);
+                });
+            }
+            
+            updateLayoutForDevice() {
+                // 根据设备类型调整布局
+                const clock = document.getElementById('flipClock');
+                
+                switch(this.deviceType) {
+                    case 'phone-portrait':
+                        clock.style.gap = 'calc(var(--gap-sm) * 0.8)';
+                        break;
+                    case 'phone-landscape':
+                        clock.style.flexWrap = 'nowrap';
+                        clock.style.gap = 'var(--gap-sm)';
+                        break;
+                    case 'tv':
+                        clock.style.gap = 'var(--gap-lg)';
+                        break;
+                    default:
+                        clock.style.gap = 'var(--gap-md)';
+                }
+                
+                // 重新初始化动画元素
+                this.initAnimationElements();
+            }
+            
+            startClock() {
+                // 使用requestAnimationFrame实现更平滑的更新
+                let lastUpdate = 0;
+                const updateFrame = (timestamp) => {
+                    if (timestamp - lastUpdate >= 1000) {
+                        this.updateTime();
+                        lastUpdate = timestamp;
+                    }
+                    requestAnimationFrame(updateFrame);
+                };
+                requestAnimationFrame(updateFrame);
+                
+                // 防烧屏检查
+                setInterval(() => {
+                    this.checkBurnProtection();
+                }, 5000);
+            }
+            
+            updateTime() {
+                const now = new Date();
+                let hours = now.getHours();
+                const minutes = now.getMinutes();
+                const seconds = now.getSeconds();
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                
+                hours = hours % 12;
+                hours = hours === 0 ? 12 : hours;
+                
+                const newTime = {
+                    hour: hours.toString().padStart(2, '0'),
+                    minute: minutes.toString().padStart(2, '0'),
+                    second: seconds.toString().padStart(2, '0'),
+                    ampm: ampm
+                };
+                
+                this.updateIfChanged('hour', newTime.hour);
+                this.updateIfChanged('minute', newTime.minute);
+                this.updateIfChanged('second', newTime.second);
+                
+                if (this.currentTime.ampm !== newTime.ampm) {
+                    document.getElementById('ampmDisplay').textContent = newTime.ampm;
+                    this.currentTime.ampm = newTime.ampm;
+                }
+            }
+            
+            updateIfChanged(unit, newValue) {
+                if (this.currentTime[unit] !== newValue && !this.isAnimating[unit]) {
+                    this.flipUnit(unit, newValue);
+                }
+            }
+            
+            flipUnit(unit, newValue) {
+                const oldValue = this.currentTime[unit];
+                this.isAnimating[unit] = true;
+                
+                const displayElement = document.getElementById(`${unit}Display`);
+                const topCard = document.getElementById(`${unit}Top`);
+                const bottomCard = document.getElementById(`${unit}Bottom`);
+                
+                bottomCard.textContent = newValue;
+                
+                // 根据设备类型调整动画速度
+                const duration = this.deviceType === 'tv' ? 800 : 600;
+                
+                topCard.style.transform = 'rotateX(-180deg)';
+                bottomCard.style.transform = 'rotateX(0deg)';
+                
+                setTimeout(() => {
+                    displayElement.textContent = newValue;
+                    topCard.textContent = newValue;
+                    
+                    setTimeout(() => {
+                        topCard.style.transform = 'rotateX(0deg)';
+                        bottomCard.style.transform = 'rotateX(90deg)';
+                        bottomCard.textContent = newValue;
+                        
+                        this.currentTime[unit] = newValue;
+                        this.isAnimating[unit] = false;
+                    }, 50);
+                }, duration);
+            }
+            
+            updateClockScale() {
+                const clock = document.getElementById('flipClock');
+                clock.style.transform = `scale(${this.scale})`;
+            }
+            
+            checkBurnProtection() {
+                const now = Date.now();
+                
+                // 电视和大屏设备需要更频繁的像素移动
+                const interval = this.deviceType === 'tv' ? 
+                    15 * 60 * 1000 : // 15分钟
+                    30 * 60 * 1000;  // 30分钟
+                
+                if (now - this.burnProtection.lastShift > interval) {
+                    this.shiftPixels();
+                    this.burnProtection.lastShift = now;
+                }
+            }
+            
+            shiftPixels() {
+                // 根据设备类型调整移动幅度
+                const maxShift = this.deviceType === 'tv' ? 3 : 2;
+                const x = (Math.random() * maxShift * 2 - maxShift).toFixed(1);
+                const y = (Math.random() * maxShift * 2 - maxShift).toFixed(1);
+                
+                this.burnProtection.shiftAmount = { x, y };
+                document.body.style.transform = `translate(${x}px, ${y}px)`;
+                
+                setTimeout(() => {
+                    document.body.style.transform = 'translate(0, 0)';
+                }, 30000);
+            }
+            
+            resetBrightness() {
+                this.burnProtection.brightness = 1.0;
+                document.body.style.filter = 'brightness(1)';
+            }
+            
+            showHint(message, duration = 2000) {
+                const hint = document.getElementById('hint');
+                hint.textContent = message;
+                hint.classList.add('visible');
+                
+                setTimeout(() => {
+                    hint.classList.remove('visible');
+                }, duration);
+            }
+        }
+        
+        // PWA支持
+        if ('serviceWorker' in navigator && location.protocol === 'https:') {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
+        
+        // 应用启动
+        document.addEventListener('DOMContentLoaded', () => {
+            // 禁止缩放（触摸设备除外）
+            if (!('ontouchstart' in window)) {
+                document.addEventListener('wheel', (e) => {
+                    if (e.ctrlKey) e.preventDefault();
+                }, { passive: false });
+            }
+            
+            console.log('初始化自适应翻页时钟...');
+            window.clock = new AdaptiveFlipClock();
+            
+            // 添加到主屏幕提示
+            window.addEventListener('beforeinstallprompt', (e) => {
+                console.log('可添加到主屏幕');
+            });
+        });
+        
+        // 页面可见性API - 节省资源
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('页面隐藏，可暂停非必要动画');
+            } else {
+                console.log('页面可见，恢复动画');
+            }
+        });
+    </script>
+</body>
+</html>
